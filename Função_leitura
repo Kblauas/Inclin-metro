@@ -70,7 +70,7 @@ void loop() {
     ysoma+=accelerations.y;
     zsoma+=accelerations.z;
     
-    if(j==nummedidas-1){
+    if(j==(nummedidas-1)){
       
       xraw=xsoma/(10);
       yraw=ysoma/(10);
