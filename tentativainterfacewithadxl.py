@@ -11,26 +11,21 @@ import serial
 import struct
 
 # Configura a comunicação serial
-ser = serial.Serial('COM5', 115200, timeout=1)  # Ajuste 'COM8' conforme necessário
+ser = serial.Serial('COM8', 115200, timeout=1)  # Ajuste 'COM8' conforme necessário
 
 def ler_dados():
     if ser.in_waiting >= 13:  # Garante que há pelo menos 13 bytes no buffer
         dados = ser.read(13)  # Lê 13 bytes (1 cabeçalho + 12 dados)
 
         if dados[0] == 0xAA:  # Verifica se o cabeçalho está correto
-            # Desempacota 3 valores inteiros (2 bytes cada)
-            p, r, pos, pa, ra, posa = struct.unpack('>hhhhhh', dados[1:])
+            # Desempacota 6 valores inteiros (2 bytes cada, big-endian)
+            v1, v2, v3, v4, v5, v6 = struct.unpack('>hhhhhh', dados[1:])
 
             # Converte os valores para float
-            p = p / 100.0
-            r = r / 100.0
-            pos = pos / 100.0
-            pa = pa /100.0
-            ra = ra/100.0
-            posa = posa/100.0
+            v1, v2, v3, v4, v5, v6 = [v / 100.0 for v in (v1, v2, v3, v4, v5, v6)]
 
-            print(f"Pitch: {p:.2f}, ADXL-Pitch {pa:.2f}, Roll: {r:.2f}, ADXL-Roll {ra:.2f}, Position: {pos:.2f}, ADXL-Position {posa:.2f}")
-            return p, r, pos, pa, ra, posa  # Retorna os três valores convertidos
+            print(f"V1: {v1:.2f}, V2: {v2:.2f}, V3: {v3:.2f}, V4: {v4:.2f}, V5: {v5:.2f}, V6: {v6:.2f}")
+            return v1, v2, v3, v4, v5, v6  # Retorna os valores convertidos
         else:
             print("Cabeçalho incorreto, descartando pacote!")
             ser.reset_input_buffer()  # Limpa o buffer para evitar leituras erradas
@@ -55,9 +50,9 @@ class DynamicPlotApp:
         self.y1_data = deque(maxlen=tamanho_maximo)
         self.y2_data = deque(maxlen=tamanho_maximo)
         self.y3_data = deque(maxlen=tamanho_maximo)
-        self.ax_data = deque(maxlen=tamanho_maximo)
-        self.ay_data = deque(maxlen=tamanho_maximo)  
-        self.az_data = deque(maxlen=tamanho_maximo)  
+        self.gx_data = deque(maxlen=tamanho_maximo)  # Não está sendo usado
+        self.gy_data = deque(maxlen=tamanho_maximo)  # Não está sendo usado
+        self.gz_data = deque(maxlen=tamanho_maximo)  # Não está sendo usado
 
         # Threading lock para segurança
         self.lock = threading.Lock()
@@ -120,16 +115,16 @@ class DynamicPlotApp:
             if not self.paused:
                 leitura = ler_dados()
                 if leitura:
-                    p, r, pos, pa, ra, posa = leitura
+                    p, r, pos, a_p, a_r, a_pos = leitura
 
                     with self.lock:  # Garante acesso seguro aos dados
                         self.x_data.append(cont)
                         self.y1_data.append(p)
                         self.y2_data.append(r)
                         self.y3_data.append(pos)
-                        self.ax_data.append(pa)
-                        self.ay_data.append(ra)
-                        self.az_data.append(posa)
+                        self.gx_data.append(a_p)
+                        self.gy_data.append(a_r)
+                        self.gz_data.append(a_pos)
                         cont += 1
 
                     self.update_plots()
@@ -139,20 +134,22 @@ class DynamicPlotApp:
         with self.lock:  # Garante acesso seguro aos dados
             if self.x_data:
                 self.ax1.clear()
-                self.ax1.plot(self.x_data, self.y1_data, self.ax_data, label="Pitch", color="blue")
-                self.ax1.set_title("X")
+                self.ax1.plot(self.x_data, self.y1_data, label="Pitch", color="blue")
+                self.ax1.plot(self.x_data, self.gx_data, label="Pitch", color="red")
+                self.ax1.set_title("Pitch")
 
                 self.ax2.clear()
-                self.ax2.plot(self.x_data, self.y2_data, self.ay_data, label="Roll", color="green")
-                self.ax2.set_title("Y")
+                self.ax2.plot(self.x_data, self.y2_data, label="Roll", color="blue")
+                self.ax2.plot(self.x_data, self.gy_data, label="Roll", color="red")
+                self.ax2.set_title("Roll")
 
                 self.ax3.clear()
-                self.ax3.plot(self.x_data, self.y3_data, self.az_data, label="Position", color="red")
-                self.ax3.set_title("Z")
+                self.ax3.plot(self.x_data, self.y3_data, label="Position", color="blue")
+                self.ax3.plot(self.x_data, self.gz_data, label="Position", color="red")
+                self.ax3.set_title("Position")
 
                 # Se gx_data, gy_data, gz_data forem usados, adicione-os aqui
                 self.ax4.clear()
-                self.ax4.plot()
                 self.ax4.set_title("Giroscópio")
                 #self.ax4.legend()
 
@@ -163,7 +160,7 @@ class DynamicPlotApp:
         file_name = f'dados_gravados_{dataID}.txt'
 
         if self.x_data:
-            folder_path = "C:\\Users\\Kauan\\Solution\\Data"
+            folder_path = "C:\\Users\\bruno\\Desktop\\Solution\\TOUSANDOESSES\\painel_inclinometro\\dados"
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
